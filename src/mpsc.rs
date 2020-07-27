@@ -12,7 +12,7 @@ pub fn unbounded<T: 'static + Send>() -> (Sender<T>, Receiver<T>) {
     (Sender { queue: queue.clone() }, Receiver { queue })
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Sender<T: 'static + Send> {
     queue: Arc<WakerQueue<T>>,
 }
@@ -23,6 +23,7 @@ impl<T: 'static + Send> AsyncQueue<T> for Sender<T> {
 
 impl<T: 'static + Send> crate::Sender<T> for Sender<T> {}
 
+#[derive(Debug)]
 pub struct Receiver<T: 'static + Send> {
     queue: Arc<WakerQueue<T>>,
 }

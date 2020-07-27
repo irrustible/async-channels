@@ -5,6 +5,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
+#[derive(Debug)]
 pub struct WakerQueue<T> {
     queue: ConcurrentQueue<T>,
     waker: AtomicWaker,
