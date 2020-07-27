@@ -24,6 +24,12 @@ impl<T: 'static + Send> crate::AsyncSender<T> for Sender<T> {}
 
 impl<T: 'static + Send> crate::Sender<T> for Sender<T> {}
 
+impl<T: 'static + Send> Drop for Sender<T> {
+    fn drop(&mut self) {
+        self.queue.close();
+    }
+}
+
 pub struct Receiver<T: 'static + Send> {
     queue: Arc<WakerQueue<T>>,
 }
