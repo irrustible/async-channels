@@ -12,6 +12,7 @@ pub struct WakerQueue<T> {
 }
 
 impl<T: 'static + Send> WakerQueue<T> {
+
     pub fn bounded(size: usize) -> WakerQueue<T> {
         WakerQueue {
             queue: ConcurrentQueue::bounded(size),
@@ -54,30 +55,36 @@ impl<T: 'static + Send> WakerQueue<T> {
         self.queue.push(value)
     }
 
-    pub fn try_push_wake(&self, value: T) -> Result<(), PushError<T>> {
-        let was_empty = self.queue.is_empty();
-        match self.queue.push(value) {
-            Ok(()) => {
-                if was_empty { self.waker.wake(); }
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+    pub fn try_push_wake(&self, value: T, wake: bool) -> Result<(), PushError<T>> {
+        let ret = self.try_push(value);
+        self.wake_if(ret.is_ok() && wake);
+        ret
+    }
+
+    pub fn try_push_wake_empty(&self, value: T) -> Result<(), PushError<T>> {
+        self.try_push_wake(value, self.is_empty())
+    }
+    
+    pub fn try_push_wake_full(&self, value: T) -> Result<(), PushError<T>> {
+        self.try_push_wake(value, self.is_full())
     }
     
     pub fn try_pop(&self) -> Result<T, PopError> {
         self.queue.pop()
     }
 
-    pub fn try_pop_wake(&self) -> Result<T, PopError> {
-        let was_full = self.queue.is_full();
-        match self.queue.pop() {
-            Ok(val) => {
-                if was_full { self.wake(); }
-                Ok(val)
-            }
-            Err(e) => Err(e),
-        }
+    pub fn try_pop_wake(&self, wake: bool) -> Result<T, PopError> {
+        let ret = self.try_pop();
+        self.wake_if(ret.is_ok() && wake);
+        ret
+    }
+
+    pub fn try_pop_wake_empty(&self) -> Result<T, PopError> {
+        self.try_pop_wake(self.is_empty())
+    }
+
+    pub fn try_pop_wake_full(&self) -> Result<T, PopError> {
+        self.try_pop_wake(self.is_full())
     }
 
     pub fn push<'a>(&'a self, value:T) -> Push<'a, T> {
@@ -94,6 +101,10 @@ impl<T: 'static + Send> WakerQueue<T> {
 
     pub fn wake(&self) {
         self.waker.wake();
+    }
+
+    pub fn wake_if(&self, wake: bool) {
+        if wake { self.wake(); }
     }
 }
 
@@ -148,13 +159,11 @@ impl<'a, T: 'static + Send> Future for Pop<'a, T> {
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Result<T, PopError>> {
         let this = self.project();
+        this.queue.register(ctx.waker());
         match this.queue.try_pop() {
             Ok(val) => Poll::Ready(Ok(val)),
             Err(PopError::Closed) => Poll::Ready(Err(PopError::Closed)),
-            Err(PopError::Empty) => {
-                this.queue.register(ctx.waker());
-                Poll::Pending
-            }
+            Err(PopError::Empty) => Poll::Pending,
         }
     }
 }
